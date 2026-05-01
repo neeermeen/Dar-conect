@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { UserProfileCard } from "@/components/user/user-profile-card";
@@ -8,18 +9,67 @@ import { SavedPropertiesList } from "@/components/user/saved-properties-list";
 import { InquiriesList } from "@/components/user/inquiries-list";
 import { AccountSettings } from "@/components/user/account-settings";
 import { mockUser } from "@/lib/user";
-import { Heart, MessageSquare, Settings, User } from "lucide-react";
+import { Heart, MessageSquare, Settings, User, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
+import { signOut } from "@/lib/auth";
 
 type Tab = "profile" | "saved" | "inquiries" | "settings";
 
 export default function AccountPage() {
   const [activeTab, setActiveTab] = useState<Tab>("profile");
-  const user = mockUser;
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const mockUserData = mockUser;
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          router.push("/login");
+          return;
+        }
+
+        const userRole = session?.user?.user_metadata?.role || "user";
+        
+        if (userRole === "admin") {
+          router.push("/admin");
+          return;
+        }
+
+        setUser(session.user);
+        setLoading(false);
+      } catch (error) {
+        console.error("Auth check error:", error);
+        router.push("/login");
+      }
+    };
+
+    checkAuth();
+  }, [router]);
+
+  const handleLogout = async () => {
+    const { error } = await signOut();
+    if (!error) {
+      router.push("/login");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   const tabs = [
     { id: "profile" as Tab, label: "Mon Profil", icon: User },
-    { id: "saved" as Tab, label: "Favoris", icon: Heart, count: user.savedProperties.length },
-    { id: "inquiries" as Tab, label: "Mes Demandes", icon: MessageSquare, count: user.inquiries.length },
+    { id: "saved" as Tab, label: "Favoris", icon: Heart, count: mockUserData.savedProperties.length },
+    { id: "inquiries" as Tab, label: "Mes Demandes", icon: MessageSquare, count: mockUserData.inquiries.length },
     { id: "settings" as Tab, label: "Paramètres", icon: Settings },
   ];
 
@@ -30,13 +80,23 @@ export default function AccountPage() {
       <main className="flex-1">
         {/* Header Section */}
         <section className="bg-primary py-16">
-          <div className="container mx-auto px-4">
-            <h1 className="font-serif text-3xl md:text-4xl text-primary-foreground text-balance">
-              Mon Espace Personnel
-            </h1>
-            <p className="mt-2 text-primary-foreground/80">
-              Gérez votre profil, vos favoris et vos demandes
-            </p>
+          <div className="container mx-auto px-4 flex items-center justify-between">
+            <div>
+              <h1 className="font-serif text-3xl md:text-4xl text-primary-foreground text-balance">
+                Mon Espace Personnel
+              </h1>
+              <p className="mt-2 text-primary-foreground/80">
+                Bienvenue, {user?.email || "Utilisateur"}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="border-primary-foreground text-primary-foreground hover:bg-primary-foreground/10"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
           </div>
         </section>
 
@@ -76,10 +136,10 @@ export default function AccountPage() {
 
             {/* Main Content */}
             <div className="flex-1 min-w-0">
-              {activeTab === "profile" && <UserProfileCard user={user} />}
-              {activeTab === "saved" && <SavedPropertiesList savedProperties={user.savedProperties} />}
-              {activeTab === "inquiries" && <InquiriesList inquiries={user.inquiries} />}
-              {activeTab === "settings" && <AccountSettings user={user} />}
+              {activeTab === "profile" && <UserProfileCard user={mockUserData} />}
+              {activeTab === "saved" && <SavedPropertiesList savedProperties={mockUserData.savedProperties} />}
+              {activeTab === "inquiries" && <InquiriesList inquiries={mockUserData.inquiries} />}
+              {activeTab === "settings" && <AccountSettings user={mockUserData} />}
             </div>
           </div>
         </div>

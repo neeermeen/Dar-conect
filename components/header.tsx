@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Menu, X, Phone, Mail, User } from "lucide-react";
+import { Menu, X, Phone, Mail, User, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function Header() {
@@ -64,9 +64,26 @@ export function Header() {
             >
               Contact
             </Link>
+            <Link
+              href="/admin"
+              className="text-sm font-medium text-foreground hover:text-gold transition-colors flex items-center gap-1"
+            >
+              <Shield className="h-4 w-4" />
+              Admin
+            </Link>
           </div>
 
           <div className="hidden md:flex items-center gap-4">
+            <Link href="/login">
+              <Button variant="ghost" className="text-foreground hover:text-gold transition-colors">
+                Login
+              </Button>
+            </Link>
+            <Link href="/signup">
+              <Button className="bg-gold hover:bg-gold/90 text-primary-foreground">
+                Sign Up
+              </Button>
+            </Link>
             <Link href="/account">
               <Button variant="ghost" size="icon" className="text-foreground hover:text-accent">
                 <User className="h-5 w-5" />
@@ -123,12 +140,32 @@ export function Header() {
                 Contact
               </Link>
               <Link
+                href="/admin"
+                className="text-sm font-medium text-foreground hover:text-gold transition-colors flex items-center gap-1"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <Shield className="h-4 w-4" />
+                Admin
+              </Link>
+              <Link
                 href="/account"
                 className="text-sm font-medium text-foreground hover:text-gold transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Mon Compte
               </Link>
+              <div className="flex gap-2 pt-2 border-t border-border">
+                <Link href="/login" className="flex-1" onClick={() => setIsMenuOpen(false)}>
+                  <Button variant="outline" className="w-full border-gold text-gold">
+                    Login
+                  </Button>
+                </Link>
+                <Link href="/signup" className="flex-1" onClick={() => setIsMenuOpen(false)}>
+                  <Button className="w-full bg-gold hover:bg-gold/90 text-primary-foreground">
+                    Sign Up
+                  </Button>
+                </Link>
+              </div>
               <Button variant="outline" className="border-gold text-gold hover:bg-gold hover:text-primary-foreground w-full">
                 Schedule a Visit
               </Button>
