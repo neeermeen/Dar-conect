@@ -1,434 +1,524 @@
 "use client";
-
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Header } from "@/components/header";
-import { Footer } from "@/components/footer";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { 
-  BarChart3, 
-  Users, 
-  Building2, 
-  MessageSquare, 
-  DollarSign,
-  LogOut,
-  Settings,
-  MoreVertical
-} from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { signOut } from "@/lib/auth";
+import { useRouter } from "next/navigation";
+import {
+  updateVisitStatus,
+  getAllVisits,
+  VisitReservation,
+} from "@/lib/visits";
 
-type AdminTab = "overview" | "users" | "properties" | "inquiries" | "settings";
-
-const mockStats = [
-  {
-    title: "Total Users",
-    value: "1,245",
-    change: "+12%",
-    icon: Users,
-    color: "text-blue-500",
-  },
-  {
-    title: "Total Properties",
-    value: "128",
-    change: "+5%",
-    icon: Building2,
-    color: "text-green-500",
-  },
-  {
-    title: "Pending Inquiries",
-    value: "23",
-    change: "-2%",
-    icon: MessageSquare,
-    color: "text-orange-500",
-  },
-  {
-    title: "Revenue",
-    value: "$45,231",
-    change: "+18%",
-    icon: DollarSign,
-    color: "text-purple-500",
-  },
-];
-
-const mockUsers = [
-  { id: 1, name: "Jean Dupont", email: "jean@example.com", status: "Active", joinDate: "2024-01-15" },
-  { id: 2, name: "Marie Laurent", email: "marie@example.com", status: "Active", joinDate: "2024-02-10" },
-  { id: 3, name: "Pierre Martin", email: "pierre@example.com", status: "Inactive", joinDate: "2024-01-20" },
-];
-
-const mockProperties = [
-  { id: 1, title: "Villa Méditerranée", location: "Nice", price: "$2.5M", status: "Active" },
-  { id: 2, title: "Château de la Loire", location: "Loire Valley", price: "$4.8M", status: "Active" },
-  { id: 3, title: "Penthouse Étoile", location: "Paris", price: "$3.2M", status: "Pending" },
-];
-
-const mockInquiries = [
-  { id: 1, name: "John Smith", property: "Villa Méditerranée", message: "Interested in viewing", date: "2024-03-15", status: "Pending" },
-  { id: 2, name: "Sarah Johnson", property: "Penthouse Étoile", message: "Negotiation inquiry", date: "2024-03-14", status: "Responded" },
-  { id: 3, name: "Alex Brown", property: "Château de la Loire", message: "Schedule visit", date: "2024-03-13", status: "Closed" },
-];
+type AdminTab = "overview" | "maisons" | "visites";
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
-  const [user, setUser] = useState<any>(null);
+  const [maisons, setMaisons] = useState([]);
+  const [visites, setVisites] = useState<VisitReservation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     const checkAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          router.push("/login");
-          return;
-        }
-
-        const userRole = session?.user?.user_metadata?.role || "user";
-        
-        if (userRole !== "admin") {
-          router.push("/account");
-          return;
-        }
-
-        setUser(session.user);
-        setIsAdmin(true);
-        setLoading(false);
-      } catch (error) {
-        console.error("Auth check error:", error);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
         router.push("/login");
+        return;
       }
-    };
+      setUser(user);
 
+      const maisonsData = await supabase
+        .from("maisons")
+        .select("*")
+        .then((r) => r.data || []);
+      const visitesData = await getAllVisits();
+      setMaisons((maisonsData || []) as any);
+      setVisites(visitesData || []);
+      setLoading(false);
+    };
     checkAuth();
-  }, [router]);
+  }, []);
 
   const handleLogout = async () => {
-    const { error } = await signOut();
-    if (!error) {
-      router.push("/login");
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
+  const refreshVisites = async () => {
+    const data = await getAllVisits();
+    setVisites(data || []);
+  };
+
+  const handleConfirm = async (visitId: string) => {
+    const result = await updateVisitStatus(visitId, "confirmed");
+    if (result.success) {
+      refreshVisites();
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+  const handleReject = async (visitId: string) => {
+    const result = await updateVisitStatus(visitId, "cancelled");
+    if (result.success) {
+      refreshVisites();
+    }
+  };
 
-  if (!isAdmin) {
-    return null;
-  }
+  if (loading)
+    return (
+      <div style={{ padding: "40px", textAlign: "center" }}>Chargement...</div>
+    );
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <Header />
-      <main className="flex-1 pt-32 pb-12">
-        <div className="container mx-auto px-4">
-          {/* Admin Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="font-serif text-3xl font-bold text-foreground">Admin Dashboard</h1>
-              <p className="text-muted-foreground">Welcome, {user?.email || "Admin"}</p>
-            </div>
-            <Button
-              variant="outline"
-              className="border-destructive text-destructive hover:bg-destructive/10"
-              onClick={handleLogout}
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Logout
-            </Button>
-          </div>
+    <div style={{ minHeight: "100vh", background: "#f5f5f5" }}>
+      <nav
+        style={{
+          background: "#1a1a2e",
+          padding: "15px 30px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <h1 style={{ color: "white", margin: 0 }}>🏠 Dar-Connect Admin</h1>
+        <button
+          onClick={handleLogout}
+          style={{
+            background: "#e94560",
+            color: "white",
+            padding: "8px 20px",
+            borderRadius: "5px",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          Se déconnecter
+        </button>
+      </nav>
 
-          {/* Tabs */}
-          <div className="flex gap-2 mb-8 border-b border-border">
-            <button
-              onClick={() => setActiveTab("overview")}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === "overview"
-                  ? "border-gold text-gold"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveTab("users")}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === "users"
-                  ? "border-gold text-gold"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Users
-            </button>
-            <button
-              onClick={() => setActiveTab("properties")}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === "properties"
-                  ? "border-gold text-gold"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Properties
-            </button>
-            <button
-              onClick={() => setActiveTab("inquiries")}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === "inquiries"
-                  ? "border-gold text-gold"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Inquiries
-            </button>
-            <button
-              onClick={() => setActiveTab("settings")}
-              className={`px-4 py-2 font-medium border-b-2 transition-colors ${
-                activeTab === "settings"
-                  ? "border-gold text-gold"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Settings
-            </button>
-          </div>
+      <div style={{ padding: "40px", maxWidth: "1200px", margin: "0 auto" }}>
+        <h1 style={{ marginBottom: "30px" }}>Tableau de Bord Admin</h1>
 
-          {/* Overview Tab */}
-          {activeTab === "overview" && (
-            <div className="space-y-6">
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {mockStats.map((stat, index) => {
-                  const Icon = stat.icon;
-                  return (
-                    <Card key={index} className="border-gold/20">
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-muted-foreground text-sm">{stat.title}</p>
-                            <p className="font-serif text-3xl font-bold text-foreground mt-1">
-                              {stat.value}
-                            </p>
-                            <p className="text-sm text-green-500 mt-1">{stat.change}</p>
-                          </div>
-                          <Icon className={`h-10 w-10 ${stat.color} opacity-80`} />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              {/* Quick Actions */}
-              <Card className="border-gold/20">
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Button className="bg-gold hover:bg-gold/90 text-primary-foreground">
-                    Add Property
-                  </Button>
-                  <Button variant="outline" className="border-gold text-gold">
-                    Manage Users
-                  </Button>
-                  <Button variant="outline" className="border-gold text-gold">
-                    View Reports
-                  </Button>
-                  <Button variant="outline" className="border-gold text-gold">
-                    Settings
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Users Tab */}
-          {activeTab === "users" && (
-            <Card className="border-gold/20">
-              <CardHeader>
-                <CardTitle>User Management</CardTitle>
-                <CardDescription>Manage platform users</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-border">
-                      <tr>
-                        <th className="text-left py-3 px-4 font-semibold">Name</th>
-                        <th className="text-left py-3 px-4 font-semibold">Email</th>
-                        <th className="text-left py-3 px-4 font-semibold">Status</th>
-                        <th className="text-left py-3 px-4 font-semibold">Join Date</th>
-                        <th className="text-center py-3 px-4 font-semibold">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mockUsers.map((u) => (
-                        <tr key={u.id} className="border-b border-border hover:bg-muted/50">
-                          <td className="py-3 px-4">{u.name}</td>
-                          <td className="py-3 px-4">{u.email}</td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              u.status === "Active"
-                                ? "bg-green-500/20 text-green-700"
-                                : "bg-red-500/20 text-red-700"
-                            }`}>
-                              {u.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">{u.joinDate}</td>
-                          <td className="py-3 px-4 text-center">
-                            <button className="p-1 hover:bg-muted rounded">
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Properties Tab */}
-          {activeTab === "properties" && (
-            <Card className="border-gold/20">
-              <CardHeader>
-                <CardTitle>Property Management</CardTitle>
-                <CardDescription>Manage all properties</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-border">
-                      <tr>
-                        <th className="text-left py-3 px-4 font-semibold">Title</th>
-                        <th className="text-left py-3 px-4 font-semibold">Location</th>
-                        <th className="text-left py-3 px-4 font-semibold">Price</th>
-                        <th className="text-left py-3 px-4 font-semibold">Status</th>
-                        <th className="text-center py-3 px-4 font-semibold">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mockProperties.map((property) => (
-                        <tr key={property.id} className="border-b border-border hover:bg-muted/50">
-                          <td className="py-3 px-4">{property.title}</td>
-                          <td className="py-3 px-4">{property.location}</td>
-                          <td className="py-3 px-4">{property.price}</td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              property.status === "Active"
-                                ? "bg-green-500/20 text-green-700"
-                                : "bg-yellow-500/20 text-yellow-700"
-                            }`}>
-                              {property.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <button className="p-1 hover:bg-muted rounded">
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Inquiries Tab */}
-          {activeTab === "inquiries" && (
-            <Card className="border-gold/20">
-              <CardHeader>
-                <CardTitle>Inquiry Management</CardTitle>
-                <CardDescription>Manage user inquiries</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-border">
-                      <tr>
-                        <th className="text-left py-3 px-4 font-semibold">Name</th>
-                        <th className="text-left py-3 px-4 font-semibold">Property</th>
-                        <th className="text-left py-3 px-4 font-semibold">Message</th>
-                        <th className="text-left py-3 px-4 font-semibold">Date</th>
-                        <th className="text-left py-3 px-4 font-semibold">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mockInquiries.map((inquiry) => (
-                        <tr key={inquiry.id} className="border-b border-border hover:bg-muted/50">
-                          <td className="py-3 px-4">{inquiry.name}</td>
-                          <td className="py-3 px-4">{inquiry.property}</td>
-                          <td className="py-3 px-4 truncate">{inquiry.message}</td>
-                          <td className="py-3 px-4">{inquiry.date}</td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              inquiry.status === "Pending"
-                                ? "bg-orange-500/20 text-orange-700"
-                                : inquiry.status === "Responded"
-                                ? "bg-blue-500/20 text-blue-700"
-                                : "bg-gray-500/20 text-gray-700"
-                            }`}>
-                              {inquiry.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Settings Tab */}
-          {activeTab === "settings" && (
-            <div className="space-y-6">
-              <Card className="border-gold/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    Admin Settings
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="border-b border-border pb-6">
-                    <h3 className="font-semibold mb-4">Platform Settings</h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <label className="font-medium">Enable Registrations</label>
-                        <input type="checkbox" defaultChecked className="h-5 w-5" />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <label className="font-medium">Require Email Verification</label>
-                        <input type="checkbox" defaultChecked className="h-5 w-5" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="font-semibold mb-4">Admin Account</h3>
-                    <Button variant="outline" className="border-gold text-gold">
-                      Change Password
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+        {/* Tabs */}
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginBottom: "30px",
+            borderBottom: "2px solid #ddd",
+          }}
+        >
+          <button
+            onClick={() => setActiveTab("overview")}
+            style={{
+              padding: "12px 20px",
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              borderBottom:
+                activeTab === "overview" ? "3px solid #e94560" : "none",
+              color: activeTab === "overview" ? "#e94560" : "#666",
+              fontWeight: activeTab === "overview" ? "bold" : "normal",
+              fontSize: "14px",
+            }}
+          >
+            📊 Aperçu
+          </button>
+          <button
+            onClick={() => setActiveTab("maisons")}
+            style={{
+              padding: "12px 20px",
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              borderBottom:
+                activeTab === "maisons" ? "3px solid #e94560" : "none",
+              color: activeTab === "maisons" ? "#e94560" : "#666",
+              fontWeight: activeTab === "maisons" ? "bold" : "normal",
+              fontSize: "14px",
+            }}
+          >
+            🏠 Maisons ({maisons.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("visites")}
+            style={{
+              padding: "12px 20px",
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              borderBottom:
+                activeTab === "visites" ? "3px solid #e94560" : "none",
+              color: activeTab === "visites" ? "#e94560" : "#666",
+              fontWeight: activeTab === "visites" ? "bold" : "normal",
+              fontSize: "14px",
+            }}
+          >
+            📅 Visites ({visites.length})
+          </button>
         </div>
-      </main>
-      <Footer />
+
+        {/* Overview Tab */}
+        {activeTab === "overview" && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+              gap: "20px",
+            }}
+          >
+            <div
+              style={{
+                background: "white",
+                padding: "20px",
+                borderRadius: "10px",
+                boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+              }}
+            >
+              <p
+                style={{
+                  color: "#999",
+                  fontSize: "13px",
+                  margin: "0 0 10px 0",
+                }}
+              >
+                Total Maisons
+              </p>
+              <h2 style={{ margin: "0", color: "#1a1a2e", fontSize: "32px" }}>
+                {maisons.length}
+              </h2>
+            </div>
+            <div
+              style={{
+                background: "white",
+                padding: "20px",
+                borderRadius: "10px",
+                boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+              }}
+            >
+              <p
+                style={{
+                  color: "#999",
+                  fontSize: "13px",
+                  margin: "0 0 10px 0",
+                }}
+              >
+                Total Visites
+              </p>
+              <h2 style={{ margin: "0", color: "#1a1a2e", fontSize: "32px" }}>
+                {visites.length}
+              </h2>
+            </div>
+            <div
+              style={{
+                background: "white",
+                padding: "20px",
+                borderRadius: "10px",
+                boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+              }}
+            >
+              <p
+                style={{
+                  color: "#999",
+                  fontSize: "13px",
+                  margin: "0 0 10px 0",
+                }}
+              >
+                Visites Confirmées
+              </p>
+              <h2 style={{ margin: "0", color: "#1a1a2e", fontSize: "32px" }}>
+                {visites.filter((v: any) => v.statut === "confirmée").length}
+              </h2>
+            </div>
+          </div>
+        )}
+
+        {/* Maisons Tab */}
+        {activeTab === "maisons" && (
+          <div
+            style={{
+              background: "white",
+              borderRadius: "10px",
+              overflow: "hidden",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            }}
+          >
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr
+                  style={{
+                    background: "#f5f5f5",
+                    borderBottom: "2px solid #ddd",
+                  }}
+                >
+                  <th
+                    style={{
+                      padding: "15px",
+                      textAlign: "left",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Titre
+                  </th>
+                  <th
+                    style={{
+                      padding: "15px",
+                      textAlign: "left",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Ville
+                  </th>
+                  <th
+                    style={{
+                      padding: "15px",
+                      textAlign: "left",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Prix/mois
+                  </th>
+                  <th
+                    style={{
+                      padding: "15px",
+                      textAlign: "left",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Description
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {maisons.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      style={{
+                        padding: "40px",
+                        textAlign: "center",
+                        color: "#999",
+                      }}
+                    >
+                      Aucune maison
+                    </td>
+                  </tr>
+                ) : (
+                  maisons.map((maison: any) => (
+                    <tr
+                      key={maison.id}
+                      style={{ borderBottom: "1px solid #eee" }}
+                    >
+                      <td style={{ padding: "15px" }}>{maison.titre}</td>
+                      <td style={{ padding: "15px" }}>{maison.ville}</td>
+                      <td
+                        style={{
+                          padding: "15px",
+                          color: "#e94560",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {maison.prix_mensuel.toLocaleString("fr-FR")} DA
+                      </td>
+                      <td
+                        style={{
+                          padding: "15px",
+                          color: "#666",
+                          fontSize: "13px",
+                        }}
+                      >
+                        {maison.description}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Visites Tab */}
+        {activeTab === "visites" && (
+          <div
+            style={{
+              background: "white",
+              borderRadius: "10px",
+              overflow: "hidden",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            }}
+          >
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr
+                  style={{
+                    background: "#f5f5f5",
+                    borderBottom: "2px solid #ddd",
+                  }}
+                >
+                  <th
+                    style={{
+                      padding: "15px",
+                      textAlign: "left",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Maison
+                  </th>
+                  <th
+                    style={{
+                      padding: "15px",
+                      textAlign: "left",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Ville
+                  </th>
+                  <th
+                    style={{
+                      padding: "15px",
+                      textAlign: "left",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Date
+                  </th>
+                  <th
+                    style={{
+                      padding: "15px",
+                      textAlign: "left",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Statut
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visites.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      style={{
+                        padding: "40px",
+                        textAlign: "center",
+                        color: "#999",
+                      }}
+                    >
+                      Aucune visite
+                    </td>
+                  </tr>
+                ) : (
+                  visites.map((visite: any) => (
+                    <tr
+                      key={visite.id}
+                      style={{ borderBottom: "1px solid #eee" }}
+                    >
+                      <td style={{ padding: "15px" }}>
+                        {visite.property_title}
+                      </td>
+                      <td style={{ padding: "15px" }}>
+                        {visite.maisons?.ville || "N/A"}
+                      </td>
+                      <td style={{ padding: "15px" }}>
+                        {new Date(visite.requested_date).toLocaleDateString(
+                          "fr-FR",
+                        )}
+                      </td>
+                      <td style={{ padding: "15px", minWidth: "350px" }}>
+                        <span
+                          style={{
+                            background:
+                              visite.status === "confirmed"
+                                ? "#10b981"
+                                : visite.status === "cancelled"
+                                  ? "#ef4444"
+                                  : visite.status === "pending"
+                                    ? "#f59e0b"
+                                    : "#3b82f6",
+                            color: "white",
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            fontSize: "13px",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {visite.status === "pending"
+                            ? "En attente"
+                            : visite.status === "confirmed"
+                              ? "Confirmée"
+                              : visite.status === "cancelled"
+                                ? "Annulée"
+                                : "Terminée"}
+                        </span>
+                        {visite.status === "pending" && (
+                          <div
+                            style={{
+                              marginTop: "10px",
+                              display: "flex",
+                              gap: "8px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <button
+                              onClick={() => handleConfirm(visite.id)}
+                              style={{
+                                flex: "1",
+                                minWidth: "100px",
+                                background: "#10b981",
+                                color: "white",
+                                border: "none",
+                                padding: "8px 12px",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                fontWeight: "bold",
+                                fontSize: "13px",
+                                transition: "all 0.2s",
+                              }}
+                              onMouseOver={(e) =>
+                                (e.currentTarget.style.background = "#059669")
+                              }
+                              onMouseOut={(e) =>
+                                (e.currentTarget.style.background = "#10b981")
+                              }
+                            >
+                              ✅ Confirmer
+                            </button>
+                            <button
+                              onClick={() => handleReject(visite.id)}
+                              style={{
+                                flex: "1",
+                                minWidth: "100px",
+                                background: "#ef4444",
+                                color: "white",
+                                border: "none",
+                                padding: "8px 12px",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                fontWeight: "bold",
+                                fontSize: "13px",
+                                transition: "all 0.2s",
+                              }}
+                              onMouseOver={(e) =>
+                                (e.currentTarget.style.background = "#dc2626")
+                              }
+                              onMouseOut={(e) =>
+                                (e.currentTarget.style.background = "#ef4444")
+                              }
+                            >
+                              ❌ Rejeter
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
